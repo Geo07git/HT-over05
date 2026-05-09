@@ -12,6 +12,7 @@ from sklearn.calibration import CalibratedClassifierCV, calibration_curve
 from sklearn.metrics import roc_auc_score, brier_score_loss, log_loss, roc_curve
 import lightgbm as lgb
 import xgboost as xgb
+from model_evaluation_helper import save_evaluation_bundle
 
 try:
     import pyarrow.feather as feather
@@ -273,6 +274,17 @@ def train_all_models(df: pd.DataFrame, features: list):
     cal_ens.fit(X_train, y_train)
     ens_proba = cal_ens.predict_proba(X_test)[:, 1]
 
+    test_df = df.iloc[split_idx:].copy()
+    test_df["y"] = y_test
+    test_df["p_model"] = ens_proba
+
+    eval_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "evaluation_output")
+
+    metrics_eval, rel_q, rel_u = save_evaluation_bundle(
+        test_df,
+        out_dir=eval_dir
+    )
+
     trained["Ensemble"] = cal_ens
     metrics_out["Ensemble"] = {
         "AUC": roc_auc_score(y_test, ens_proba),
@@ -304,6 +316,7 @@ def train_all_models(df: pd.DataFrame, features: list):
         "features": features,
         "dataset_size": len(df),
         "base_rate": float(df["target"].mean()),
+        "eval_metrics": metrics_eval,
     }
 
 def bootstrap_ci90(models_dict, x_input, n_bootstrap=100, ci=0.90):

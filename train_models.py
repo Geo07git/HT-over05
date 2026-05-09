@@ -1,6 +1,7 @@
 import os
 from datetime import datetime
 from utils import fetch_raw_data, preprocess, train_all_models, save_df, save_artifact, FEATHER_OK
+from model_evaluation_helper import save_evaluation_bundle
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ARTIFACT_DIR = os.path.join(BASE_DIR, "artifacts")
