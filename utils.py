@@ -196,7 +196,6 @@ def build_input_vector(df, features, home, away, liga_sel):
     ]).reshape(1, -1)
     return x, h_rows, a_rows
 
-
 def train_all_models(df: pd.DataFrame, features: list):
     df = df.sort_values("Date").copy()
     X = build_matrix(df, features)
@@ -207,25 +206,52 @@ def train_all_models(df: pd.DataFrame, features: list):
     y_train, y_test = y[:split_idx], y[split_idx:]
 
     cv = TimeSeriesSplit(n_splits=5)
+
     base_models = {
-        "LightGBM": lgb.LGBMClassifier(n_estimators=500, max_depth=4, learning_rate=0.05, random_state=42, verbose=-1, n_jobs=-1),
-        "XGBoost": xgb.XGBClassifier(n_estimators=500, max_depth=4, learning_rate=0.05, eval_metric="logloss", random_state=42, verbosity=0, n_jobs=-1),
-        "RandomForest": RandomForestClassifier(n_estimators=500, max_depth=4, random_state=42, n_jobs=-1),
-        "LogisticRegression": LogisticRegression(max_iter=1000, random_state=42, n_jobs=-1),
+        "LightGBM": lgb.LGBMClassifier(
+            n_estimators=500,
+            max_depth=5,
+            learning_rate=0.05,
+            random_state=42,
+            verbose=-1,
+            n_jobs=-1,
+        ),
+        "XGBoost": xgb.XGBClassifier(
+            n_estimators=500,
+            max_depth=5,
+            learning_rate=0.05,
+            eval_metric="logloss",
+            random_state=42,
+            verbosity=0,
+            n_jobs=-1,
+        ),
+        "RandomForest": RandomForestClassifier(
+            n_estimators=500,
+            max_depth=5,
+            random_state=42,
+            n_jobs=-1,
+        ),
+        "LogisticRegression": LogisticRegression(
+            max_iter=1000,
+            random_state=42,
+            n_jobs=-1,
+        ),
     }
 
     trained, metrics_out = {}, {}
+
     for name, model in base_models.items():
-        cal = CalibratedClassifierCV(model, cv=cv, method="isotonic")
-        cal.fit(X_train, y_train)
-        proba = cal.predict_proba(X_test)[:, 1]
+        model.fit(X_train, y_train)
+        proba = model.predict_proba(X_test)[:, 1]
 
         cv_scores = []
         for tr_idx, val_idx in cv.split(X_train):
-            model.fit(X_train[tr_idx], y_train[tr_idx])
-            cv_scores.append(roc_auc_score(y_train[val_idx], model.predict_proba(X_train[val_idx])[:, 1]))
+            model_cv = base_models[name].__class__(**base_models[name].get_params())
+            model_cv.fit(X_train[tr_idx], y_train[tr_idx])
+            cv_pred = model_cv.predict_proba(X_train[val_idx])[:, 1]
+            cv_scores.append(roc_auc_score(y_train[val_idx], cv_pred))
 
-        trained[name] = cal
+        trained[name] = model
         metrics_out[name] = {
             "AUC": roc_auc_score(y_test, proba),
             "Brier": brier_score_loss(y_test, proba),
@@ -233,10 +259,20 @@ def train_all_models(df: pd.DataFrame, features: list):
             "CV_AUC": float(np.mean(cv_scores)),
         }
 
-    ens = VotingClassifier([(n, m) for n, m in base_models.items()], voting="soft", n_jobs=-1)
-    cal_ens = CalibratedClassifierCV(ens, cv=cv, method="isotonic")
+    ens = VotingClassifier(
+        [(n, m) for n, m in base_models.items()],
+        voting="soft",
+        n_jobs=-1
+    )
+
+    cal_ens = CalibratedClassifierCV(
+        ens,
+        cv=cv,
+        method="sigmoid"
+    )
     cal_ens.fit(X_train, y_train)
     ens_proba = cal_ens.predict_proba(X_test)[:, 1]
+
     trained["Ensemble"] = cal_ens
     metrics_out["Ensemble"] = {
         "AUC": roc_auc_score(y_test, ens_proba),
@@ -255,7 +291,7 @@ def train_all_models(df: pd.DataFrame, features: list):
 
     fi = None
     try:
-        fi = trained["LightGBM"].calibrated_classifiers_[0].estimator.feature_importances_
+        fi = trained["LightGBM"].feature_importances_
     except Exception:
         pass
 
@@ -269,7 +305,6 @@ def train_all_models(df: pd.DataFrame, features: list):
         "dataset_size": len(df),
         "base_rate": float(df["target"].mean()),
     }
-
 
 def bootstrap_ci90(models_dict, x_input, n_bootstrap=100, ci=0.90):
     alpha = (1 - ci) / 2
