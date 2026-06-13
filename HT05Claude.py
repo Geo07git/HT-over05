@@ -83,7 +83,7 @@ with st.sidebar:
     st.markdown("---")
     st.caption("Deploy mode: inference only | Community Cloud ready")
 
-st.markdown("## ⚽ HT ≥ 1 Goal Predictor — Professional Edition")
+st.markdown("## ⚽ HT ≥ 0.5 Goal Predictor — Professional Edition")
 st.markdown("Predicție probabilistică multi-model cu artefacte încărcate din repo, fără retraining în cloud.")
 st.success(f"✅ Artefacte încărcate! Dataset: **{len(df):,} meciuri**.")
 
