@@ -322,19 +322,26 @@ def train_all_models(df: pd.DataFrame, features: list):
 def bootstrap_ci90(models_dict, x_input, n_bootstrap=100, ci=0.90):
     alpha = (1 - ci) / 2
     rng = np.random.default_rng(42)
+
+    x_input = np.asarray(x_input, dtype=np.float64)
+    if x_input.ndim == 1:
+        x_input = x_input.reshape(1, -1)
+
     noise_matrix = rng.normal(0, 0.08, (n_bootstrap, x_input.shape[1]))
-    x_noisy_batch = np.clip(x_input + noise_matrix, None, None)
+    x_noisy_batch = x_input + noise_matrix
 
     results = {}
     for name, model in models_dict.items():
         preds = model.predict_proba(x_noisy_batch)[:, 1]
         preds = np.clip(preds, 1e-4, 1 - 1e-4)
+
         results[name] = {
             "mean": float(np.mean(preds)),
             "lower": float(np.percentile(preds, alpha * 100)),
             "upper": float(np.percentile(preds, (1 - alpha) * 100)),
             "std": float(np.std(preds)),
         }
+
     return results
 
 
@@ -355,3 +362,4 @@ def save_artifact(obj, path: str):
 
 def load_artifact(path: str):
     return joblib.load(path)
+
